@@ -1,0 +1,207 @@
+// Advanced Compressor for JamesDSP Linux
+// Inspired by ReaComp & Poweramp EQ
+
+@init
+// ===== PARAMETERS (Edit these values) =====
+threshold = -12;        // Threshold in dB (-60 to 0)
+ratio = 2.22;              // Compression ratio (1 to 20)
+attack_ms = 30;         // Attack time in milliseconds (0.1 to 100)
+release_ms = 500;       // Release time in milliseconds (10 to 500)
+makeup_db = 0;          // Makeup gain in dB (-20 to 20)
+auto_makeup = 1;        // Auto makeup (0=off, 1=on)
+knee_db = 4;            // Soft knee in dB (0 to 10)
+det_mode = 0;           // Detection (0=RMS, 1=Peak)
+sc_filter = 0;          // Sidechain filter (0=off, 1=on)
+sc_hp_freq = 100;       // SC high-pass frequency (20 to 20000 Hz)
+comp_mode = 0;          // Mode (0=Comp, 1=Limiter, 2=Exp, 3=Gate)
+gate_thresh = -40;      // Gate threshold in dB (-60 to 0)
+use_lookahead = 0;      // Lookahead (0=off, 1=on)
+lookahead_ms = 5;       // Lookahead time in ms (0 to 20)
+mix_pct = 100;          // Wet/dry mix in percent (0 to 100)
+
+// ===== CONSTANTS =====
+log2db = 8.6858896380650365530225783783321;
+db2log = 0.11512925464970228420089957273422;
+
+// Buffer allocations
+maxlookahead = 4410;
+lookahead_buf0 = 0;
+lookahead_buf1 = maxlookahead;
+lookahead_pos = 0;
+
+// Envelope follower state
+env_l = env_r = 0;
+gain_target = 1;
+gain_current = 1;
+
+// RMS buffer
+rms_size = 256;
+rms_buf0 = maxlookahead * 2;
+rms_buf1 = rms_buf0 + rms_size;
+rms_pos = 0;
+rms_sum0 = rms_sum1 = 0;
+
+// Sidechain filter state
+sc_hp_l1 = sc_hp_r1 = 0;
+
+// Calculate coefficients
+attack_coef = exp(-1000 / (attack_ms * srate));
+release_coef = exp(-1000 / (release_ms * srate));
+
+// Auto makeup calculation
+auto_makeup ? (
+  auto_gain_db = threshold * (1 - 1/ratio) * 0.5;
+  makeup_gain = exp(auto_gain_db * db2log);
+) : (
+  makeup_gain = exp(makeup_db * db2log);
+);
+
+// Lookahead buffer size
+lookahead_samples = min(maxlookahead, lookahead_ms * srate * 0.001);
+
+// Sidechain HP filter coefficient
+sc_hp_coef = exp(-2 * $pi * sc_hp_freq / srate);
+
+// Mix coefficient
+mix = mix_pct / 100;
+
+@sample
+// ===== INPUT =====
+in_l = spl0;
+in_r = spl1;
+
+// ===== SIDECHAIN FILTERING =====
+sc_filter ? (
+  sc_l = in_l - sc_hp_l1;
+  sc_hp_l1 = sc_hp_l1 * sc_hp_coef + in_l * (1 - sc_hp_coef);
+  
+  sc_r = in_r - sc_hp_r1;
+  sc_hp_r1 = sc_hp_r1 * sc_hp_coef + in_r * (1 - sc_hp_coef);
+) : (
+  sc_l = in_l;
+  sc_r = in_r;
+);
+
+// ===== DETECTION =====
+det_mode == 0 ? (
+  // RMS Detection
+  rms_sum0 -= rms_buf0[rms_pos];
+  rms_sum1 -= rms_buf1[rms_pos];
+  
+  rms_buf0[rms_pos] = sc_l * sc_l;
+  rms_buf1[rms_pos] = sc_r * sc_r;
+  
+  rms_sum0 += rms_buf0[rms_pos];
+  rms_sum1 += rms_buf1[rms_pos];
+  
+  rms_pos = (rms_pos + 1) % rms_size;
+  
+  det_l = sqrt(rms_sum0 / rms_size);
+  det_r = sqrt(rms_sum1 / rms_size);
+) : (
+  // Peak Detection
+  det_l = abs(sc_l);
+  det_r = abs(sc_r);
+);
+
+// Max detection signal
+det = max(det_l, det_r);
+
+// ===== LOOKAHEAD =====
+use_lookahead ? (
+  lookahead_buf0[lookahead_pos] = in_l;
+  lookahead_buf1[lookahead_pos] = in_r;
+  
+  read_pos = (lookahead_pos - lookahead_samples + maxlookahead) % maxlookahead;
+  proc_l = lookahead_buf0[read_pos];
+  proc_r = lookahead_buf1[read_pos];
+  
+  lookahead_pos = (lookahead_pos + 1) % maxlookahead;
+) : (
+  proc_l = in_l;
+  proc_r = in_r;
+);
+
+// Convert to dB
+det > 0.0000001 ? (
+  det_db = log(det) * log2db;
+) : (
+  det_db = -150;
+);
+
+// ===== GAIN CALCULATION =====
+comp_mode == 0 ? (
+  // COMPRESSOR MODE
+  overshoot = det_db - threshold;
+  
+  overshoot > 0 ? (
+    // Soft knee
+    knee_db > 0 ? (
+      overshoot < knee_db ? (
+        overshoot = overshoot * overshoot / (2 * knee_db);
+      ) : (
+        overshoot = overshoot - knee_db * 0.5;
+      );
+    );
+    
+    gain_reduce_db = overshoot * (1 - 1/ratio);
+    gain_target = exp(-gain_reduce_db * db2log);
+  ) : (
+    gain_target = 1;
+  );
+  
+) : comp_mode == 1 ? (
+  // LIMITER MODE
+  det_db > threshold ? (
+    gain_reduce_db = det_db - threshold;
+    gain_target = exp(-gain_reduce_db * db2log);
+  ) : (
+    gain_target = 1;
+  );
+  
+) : comp_mode == 2 ? (
+  // EXPANDER MODE
+  det_db < threshold ? (
+    undershoot = threshold - det_db;
+    gain_reduce_db = undershoot * (1 - ratio);
+    gain_target = exp(-gain_reduce_db * db2log);
+  ) : (
+    gain_target = 1;
+  );
+  
+) : (
+  // GATE MODE
+  det_db < gate_thresh ? (
+    gain_target = 0;
+  ) : det_db < threshold ? (
+    range = threshold - gate_thresh;
+    range > 0 ? (
+      fade = (det_db - gate_thresh) / range;
+      gain_target = fade * fade;
+    ) : (
+      gain_target = 1;
+    );
+  ) : (
+    gain_target = 1;
+  );
+);
+
+// ===== ENVELOPE FOLLOWER =====
+gain_target < gain_current ? (
+  // Attack phase
+  gain_current = gain_current * attack_coef + gain_target * (1 - attack_coef);
+) : (
+  // Release phase
+  gain_current = gain_current * release_coef + gain_target * (1 - release_coef);
+);
+
+// Apply makeup gain
+final_gain = gain_current * makeup_gain;
+
+// ===== OUTPUT =====
+wet_l = proc_l * final_gain;
+wet_r = proc_r * final_gain;
+
+// Mix wet/dry
+spl0 = proc_l * (1 - mix) + wet_l * mix;
+spl1 = proc_r * (1 - mix) + wet_r * mix;
