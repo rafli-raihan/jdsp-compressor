@@ -1,5 +1,5 @@
-## JDSP Compressor Liveprogs
-Multi-purpose Digital Compressor Inspired by REAComp and PowerAmp EQ as a JamesDSP Liveprogs
+## JDSP Compressor Liveprog
+Multi-purpose Digital Compressor Inspired by REAComp and PowerAmp EQ as a JamesDSP Liveprog
 
 Tested and works on JDSP4Linux, should be working on JamesDSP or RootlessJDSP for Android
 
