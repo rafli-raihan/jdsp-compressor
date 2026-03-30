@@ -1,18 +1,34 @@
-// Advanced Compressor for JamesDSP Linux
+.// Advanced Compressor for JamesDSP Linux
 // Inspired by ReaComp & Poweramp EQ
+
+comp_mode:0<0,3,1{Compressor,Limiter,Expander,Gate}>Mode
+threshold:-12<-60,0,1>Threshold (dB)
+ratio:2.22<1,20,0.01>Compression Ratio
+attack_ms:30<0.1,100,1>Attack Time (ms)
+release_ms:500<10,500,10>Release Time (ms)
+makeup_db:0<-20,20,1>Makeup Gain (dB)
+auto_makeup:1<0,1,1{Disabled,Enabled}>Auto Makeup
+knee_db:4<0,10,1>Soft Knee (dB)
+det_mode:0<0,1,1{RMS, Peak}>Detection (0=RMS, 1=Peak)
+sc_filter:0<0,1,1{Disabled,Enabled}>Sidechain Filter
+sc_hp_freq:100<20,20000,10>SC HP Freq (Hz)
+gate_thresh:-40<-60,0,1>Gate Threshold (dB)
+use_lookahead:0<0,1,1{Disabled,Enabled}>Lookahead
+lookahead_ms:5<0,20,1>Lookahead Time (ms)
+mix_pct:100<0,100,1>Wet/Dry Mix (%)
 
 @init
 // ===== PARAMETERS (Edit these values) =====
-threshold = -12;        // Threshold in dB (-60 to 0)
-ratio = 2.22;              // Compression ratio (1 to 20)
+threshold = -16;        // Threshold in dB (-60 to 0)
+ratio = 1.56;              // Compression ratio (1 to 20)
 attack_ms = 30;         // Attack time in milliseconds (0.1 to 100)
-release_ms = 500;       // Release time in milliseconds (10 to 500)
+release_ms = 150;       // Release time in milliseconds (10 to 500)
 makeup_db = 0;          // Makeup gain in dB (-20 to 20)
-auto_makeup = 1;        // Auto makeup (0=off, 1=on)
-knee_db = 4;            // Soft knee in dB (0 to 10)
+auto_makeup = 0;        // Auto makeup (0=off, 1=on)
+knee_db = 7;            // Soft knee in dB (0 to 10)
 det_mode = 0;           // Detection (0=RMS, 1=Peak)
-sc_filter = 0;          // Sidechain filter (0=off, 1=on)
-sc_hp_freq = 100;       // SC high-pass frequency (20 to 20000 Hz)
+sc_filter = 1;          // Sidechain filter (0=off, 1=on)
+sc_hp_freq = 42;       // SC high-pass frequency (20 to 20000 Hz)
 comp_mode = 0;          // Mode (0=Comp, 1=Limiter, 2=Exp, 3=Gate)
 gate_thresh = -40;      // Gate threshold in dB (-60 to 0)
 use_lookahead = 0;      // Lookahead (0=off, 1=on)
